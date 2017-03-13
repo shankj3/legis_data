@@ -1,14 +1,14 @@
-from flask import Flask, request, render_template, Blueprint, jsonify, flash, redirect, url_for
-from flask_socketio import SocketIO, emit
+from flask import Flask, request, jsonify
+from flask_restful import reqparse
+
 from dateutil.relativedelta import relativedelta
 import datetime
 import requests
 import requests_cache
-import random
 import collections
 
-import process.VARS as vars
-import process.legwork as leg
+import legis_data.process.VARS as vars
+import legis_data.process.legwork as leg
 
 app = Flask(__name__)
 app.secret_key = 'super secret key'
@@ -16,94 +16,34 @@ app.secret_key = 'super secret key'
 # cache for requests
 requests_cache.install_cache('test_cache', backend='sqlite', expire_after=300)
 
-
-# constituent data
-@app.route('/constituent/civic_info', methods=['POST'])
-def get_google_civic_info():
-    civic_payload = {'address': request.json().get('address'),
-                     'key': vars.GOOGLE_CIVIC_KEY,
-                     'levels': 'country'
-                     #                  'roles': 'legislatorupperbody',
-                     #                  'roles': 'legislatorlowerbody'
-                     }
-    civic_r = requests.get(vars.GOOGLE_CIVIC_ENDPOINT, params=civic_payload)
-    google_result = civic_r.json()
-    if google_result.get('error'):
-        return jsonify({'error': google_result['error'].get('message')})
-    return jsonify(google_result)
+address_parser = reqparse.RequestParser()
+address_parser.add_argument("google_address", required=True, help="google_address param required!")
 
 
-@app.route('/constituent/location', methods=['POST'])
-def get_google_location():
-    payload = {'address': request.json().get('address'), 'key': vars.API_KEY}
-    r = requests.get(vars.GOOGLE_GEOCODE_ENDPOINT, params=payload)
-    location = r.json()['results'][0]['geometry']['location']
-    return location
-
-
-# federal level
-@app.route('/us/senators/all')
+# # federal level
+@app.route('/us/senators/all', methods=['GET'])
 def get_senate_members():
-    master_senate_list = {}
-    senate_r = requests.get(vars.PRO_PUBLICA_MEMBERS_ENDPOINT.format('senate'), headers=vars.PRO_PUB_HEADERS)
-    for member in senate_r.json()['results'][0]['members']:
-        last_name_list = member['last_name'].split()
-        parsed_last_name = last_name_list[len(last_name_list) - 1]
-        name_key = ''.join(e for e in parsed_last_name if e.isalnum())
-
-        lower_name_key = name_key.lower()
-        lower_first_name = member['first_name'][0].lower()
-        formatted_key = '{0}{1}{2}'.format(lower_name_key, lower_first_name[0], member['state'])
-        master_senate_list[formatted_key] = {}
-        master_senate_list[formatted_key]['id'] = member['id']
-        master_senate_list[formatted_key]['detail_url'] = member['api_uri']
-    return jsonify(master_senate_list)
+    return jsonify(leg.SENATE_PROPUB)
 
 
-@app.route('/us/house/all')
+@app.route('/us/house/all', methods=['GET'])
 def get_house_members():
-    master_house_list = {}
-    house_r = requests.get(vars.PRO_PUBLICA_MEMBERS_ENDPOINT.format('house'), headers=vars.PRO_PUB_HEADERS)
-    for member in house_r.json()['results'][0]['members']:
-        last_name_list = member['last_name'].split()
-        parsed_last_name = last_name_list[len(last_name_list) - 1]
-        name_key = ''.join(e for e in parsed_last_name if e.isalnum())
-
-        lower_name_key = name_key.lower()
-        lower_first_name = member['first_name'][0].lower()
-        formatted_key = '{0}{1}{2}'.format(lower_name_key, lower_first_name[0], member['state'])
-        master_house_list[formatted_key] = {}
-        master_house_list[formatted_key]['id'] = member['id']
-        master_house_list[formatted_key]['detail_url'] = member['api_uri']
-    return jsonify(master_house_list)
+    return jsonify(leg.HOUSE_PROPUB)
 
 
-@app.route('/us/<state>/<name>')
-def pull_contrib_totals(name, state):
-    cand_overview = {}
-    # best way to do this?
-    election_year='laskjdf'
-    # create contributes breakdown by receipts + spending
-    cand_total_params = {'api_key': vars.OPEN_FEC_KEY,
-                         'cycle': election_year,
-                         'q': name}
-    cand_total_r = requests.get(vars.OPEN_FEC_ENDPOINT + '/candidates/totals/', params=cand_total_params)
-    cand_total = cand_total_r.json().get('results')
-    if len(cand_total) == 0:
-        name_list = name.split()
-        cand_name_filter = {'q': name_list[len(name_list) - 1],
-                                   'cycle': election_year,
-                                   'state': state,
-                                   'api_key': vars.OPEN_FEC_KEY}
-        cand_total_r = requests.get(vars.OPEN_FEC_ENDPOINT + '/candidates/totals/', params=cand_name_filter)
-        cand_total = cand_total_r.json()['results']
+@app.route('/us/my_reps', methods=['GET'])
+def get_us_reps_from_address():
+    """get a list of United States Representatives and Senators at the federal level.
+    Required request parameter of google_address, formatted: Address, City, State
 
-    if len(cand_total) > 0:
-        cand_overview['total_receipts'] = cand_total[0]['receipts']
-        cand_overview['disbursements'] = cand_total[0]['disbursements']
-        cand_overview['cash_on_hand'] = cand_total[0]['cash_on_hand_end_period']
-        cand_overview['debt'] = cand_total[0]['debts_owed_by_committee']
-    return jsonify(cand_overview)
+    If there are errors, there will only be one map in the list, formatted as such:
+    [
+        {"error" : {"<error_type>": "<error_message"}}
+    ]
+    :return: list of US reps
+    """
+    args = address_parser.parse_args()
+    return jsonify(leg.create_us_leg_list(**args))
 
 
 # state level
@@ -129,4 +69,20 @@ def get_bill_data(sunlight_id):
         data_sum += bc[1]
         rep_bill['data'].append(bill_subj)
     rep_bill['dataSum'] = data_sum
-    return jsonify(rep_bill)
+    response = jsonify(rep_bill)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/state/my_reps', methods=['GET'])
+def get_state_reps_from_address():
+    """get list of Representatives on the State level.
+    Required request parameter of google_address, formatted: Address, City, State
+
+    :return: list of State Reps
+    """
+    args = address_parser.parse_args()
+    return jsonify(leg.create_state_leg_list(**args))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0')
