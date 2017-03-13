@@ -1,9 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 from flask_restful import reqparse
 
 from dateutil.relativedelta import relativedelta
 import datetime
-import requests
 import requests_cache
 import collections
 
@@ -18,6 +17,14 @@ requests_cache.install_cache('test_cache', backend='sqlite', expire_after=300)
 
 address_parser = reqparse.RequestParser()
 address_parser.add_argument("google_address", required=True, help="google_address param required!")
+
+"""
+Lotsa shit to do regarding this.
+There aren't many endpoints, We should probably make one for individual legislators so we can give
+people the option to get more info etc
+Also should be the ability to filter with query parameters when grabbing legislation. Ideally we wouldn't process
+data the request doesn't want
+"""
 
 
 # # federal level

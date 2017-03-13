@@ -46,6 +46,7 @@ def get_senate_members():
         master_senate_list[formatted_key]['detail_url'] = member['api_uri']
     return master_senate_list
 
+# todo: we need a thread that's going to update this, maybe?
 HOUSE_PROPUB = get_house_members()
 SENATE_PROPUB = get_senate_members()
 
@@ -120,8 +121,7 @@ class USLegislator(Legislator):
                  bills=None,
                  bill_chart_data=None,
                  bill_chart_type=None,
-                 state=None,
-                 **kwargs):
+                 state=None):
         super().__init__(id, name, party, chamber, photo, bill_chart_data, level,
                          contact, social, committees, bill_chart_type, state,
                          old_term_ordinal, old_committees, bills)
@@ -275,8 +275,8 @@ class StateLegislator(Legislator):
             latest = max(terms)
             latest_array = old_roles.get(ordinal(latest))
             self.old_committees = self.get_committee(latest_array)
-            print('OOOOLLLLDDDD')
-            print(self.old_committees)
+            # print('OOOOLLLLDDDD')
+            # print(self.old_committees)
             self.old_term_ordinal = ordinal(latest)
 
     @staticmethod
@@ -327,6 +327,7 @@ def create_us_leg_list(google_address):
         if office['divisionId'] != "ocd-division/country:us":
             for index in office['officialIndices']:
                 rep = map_json_to_us_leg(civic_info['officials'][index], office['name'], state)
+                rep.grab_all_data()
                 us_leg_list.append(rep.__dict__)
     return us_leg_list
 
@@ -340,6 +341,7 @@ def create_state_leg_list(google_address):
     legislators_info = r.json()
     for legislator in legislators_info:
         rep = map_json_to_state_leg(legislator)
+        rep.grab_all_data()
         state_leg_list.append(rep.__dict__)
     return state_leg_list
 
@@ -414,7 +416,6 @@ def map_json_to_us_leg(mapper, chamber, state):
             rep_social['link'] = social_endpoint
             rep_social['type'] = type
             rep.social.append(rep_social)
-    rep.grab_all_data()
     return rep
 
 
@@ -435,9 +436,6 @@ def map_json_to_state_leg(legislator):
     rep.committees = rep.get_committee(legislator.get('roles'))
     if not rep.committees:
         rep.set_old_roles(legislator)
-
-    # create charts n stuff
-    rep.grab_all_data()
     return rep
 
 
