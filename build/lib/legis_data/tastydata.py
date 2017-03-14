@@ -13,7 +13,7 @@ app = Flask(__name__)
 app.secret_key = 'super secret key'
 
 # cache for requests
-requests_cache.install_cache('test_cache', backend='sqlite', expire_after=1200)
+requests_cache.install_cache('test_cache', backend='sqlite', expire_after=300)
 
 address_parser = reqparse.RequestParser()
 address_parser.add_argument("google_address", required=True, help="google_address param required!")

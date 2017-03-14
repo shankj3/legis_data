@@ -1,0 +1,9 @@
+.idea/
+*.iml
+*.png
+*.pdf
+*.sqlite
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
+clouds/*

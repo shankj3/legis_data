@@ -1,0 +1,4 @@
+TODO: update setup.py script to include nltk_process.py
+add nltk to requirements.txt
+hook in requirements.txt to setup.py
+
